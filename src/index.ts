@@ -74,7 +74,11 @@ export class Player {
 
     public score: number = 0;
 
-    constructor(initalCards: readonly Card[] = []) {
+    constructor(
+        public readonly id: PlayerIndex,
+        initalCards: readonly Card[] = [],
+        public bid?: number
+    ) {
         this._cards = initalCards;
     }
 
@@ -82,19 +86,21 @@ export class Player {
         return this.cards.some((c) => equalCards(c, card));
     }
 
-    public hasOtherCardForMarriage(card: Card) {
-        return (
-            (card.value === Value.King &&
-                this.hasCard({
+    public hasOtherCardForMarriage(card: Card): Boolean {
+        switch (card.value) {
+            case Value.King:
+                return this.hasCard({
                     value: Value.Queen,
                     suit: card.suit,
-                })) ||
-            (card.value === Value.Queen &&
-                this.hasCard({
+                });
+            case Value.Queen:
+                return this.hasCard({
                     value: Value.King,
                     suit: card.suit,
-                }))
-        );
+                });
+            default:
+                return false;
+        }
     }
 
     public removeCard(card: Card) {
@@ -110,6 +116,13 @@ export type PlayerIndex = 0 | 1 | 2;
 
 export class Tysiac {
     public players: readonly [Player, Player, Player];
+    public get sortedPlayers(): readonly [Player, Player, Player] {
+        return this.players.slice().sort((p1, p2) => p1.id - p2.id) as [
+            Player,
+            Player,
+            Player
+        ];
+    }
 
     public readonly cardPot: CardPot = { cards: [], suit: undefined };
     private _currentTrump?: Suit;
@@ -121,20 +134,22 @@ export class Tysiac {
         return this.players[this._currentPlayerIndex];
     }
 
-    constructor(cards?: Card[]) {
-        this.players = this.initPlayers(cards);
-        // this.currentLeader = this.players[0];
+    constructor(cards?: Card[], bid?: number) {
+        this.players = this.initPlayers(cards, bid);
         this._currentPlayerIndex = 0;
     }
 
-    private initPlayers(cards?: Card[]): readonly [Player, Player, Player] {
+    private initPlayers(
+        cards?: Card[],
+        bid?: number
+    ): readonly [Player, Player, Player] {
         const shuffledCards = cards || this.shuffle(allCards);
         const third = Math.floor(shuffledCards.length / 3);
         const twoThird = shuffledCards.length - third;
         return [
-            new Player(shuffledCards.slice(0, third)),
-            new Player(shuffledCards.slice(third, twoThird)),
-            new Player(shuffledCards.slice(twoThird)),
+            new Player(0, shuffledCards.slice(0, third), bid),
+            new Player(1, shuffledCards.slice(third, twoThird)),
+            new Player(2, shuffledCards.slice(twoThird)),
         ] as const;
     }
 
@@ -166,17 +181,6 @@ export class Tysiac {
 
         return winningIndex;
     }
-
-    // private getPlayerIndex(player: Player): 0 | 1 | 2 {
-    //     for (const index of [0, 1, 2] as const) {
-    //         if (this.players[index] === player) {
-    //             return index;
-    //         }
-    //     }
-
-    //     console.error(this.players, player);
-    //     throw new Error('Invalid player searched');
-    // }
 
     public getCardOwner(lookupCard: Card): Player | undefined {
         return this.players.find((player) =>
