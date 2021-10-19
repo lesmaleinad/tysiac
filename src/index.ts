@@ -23,6 +23,13 @@ export const valueToPoints: { [key in Value]: number } = {
     [Value.Nine]: 0,
 };
 
+export const suitToMarriagePoints: { [key in Suit]: number } = {
+    [Suit.Hearts]: 100,
+    [Suit.Diamonds]: 80,
+    [Suit.Clubs]: 60,
+    [Suit.Spades]: 40,
+};
+
 export function cardCompare(c1: Card, c2: Card, led?: Suit, trump?: Suit) {
     if ((c1.suit === trump) !== (c2.suit === trump)) {
         return c2.suit === trump ? 1 : -1;
@@ -71,6 +78,25 @@ export class Player {
         this._cards = initalCards;
     }
 
+    public hasCard(card: Card) {
+        return this.cards.some((c) => equalCards(c, card));
+    }
+
+    public hasOtherCardForMarriage(card: Card) {
+        return (
+            (card.value === Value.King &&
+                this.hasCard({
+                    value: Value.Queen,
+                    suit: card.suit,
+                })) ||
+            (card.value === Value.Queen &&
+                this.hasCard({
+                    value: Value.King,
+                    suit: card.suit,
+                }))
+        );
+    }
+
     public removeCard(card: Card) {
         this._cards = this.cards.filter((c) => !equalCards(c, card));
     }
@@ -95,18 +121,20 @@ export class Tysiac {
         return this.players[this._currentPlayerIndex];
     }
 
-    constructor() {
-        this.players = this.initPlayers();
+    constructor(cards?: Card[]) {
+        this.players = this.initPlayers(cards);
         // this.currentLeader = this.players[0];
         this._currentPlayerIndex = 0;
     }
 
-    private initPlayers(): readonly [Player, Player, Player] {
-        const shuffledCards = this.shuffle(allCards);
+    private initPlayers(cards?: Card[]): readonly [Player, Player, Player] {
+        const shuffledCards = cards || this.shuffle(allCards);
+        const third = Math.floor(shuffledCards.length / 3);
+        const twoThird = shuffledCards.length - third;
         return [
-            new Player(shuffledCards.slice(0, 8)),
-            new Player(shuffledCards.slice(8, 16)),
-            new Player(shuffledCards.slice(16)),
+            new Player(shuffledCards.slice(0, third)),
+            new Player(shuffledCards.slice(third, twoThird)),
+            new Player(shuffledCards.slice(twoThird)),
         ] as const;
     }
 
@@ -156,9 +184,9 @@ export class Tysiac {
         );
     }
 
-    private checkRoundFinished() {
+    private checkTrickFinished() {
         if (this.cardPot.cards.length === 3) {
-            this.finishRound();
+            this.finishTrick();
         } else {
             this._currentPlayerIndex++;
 
@@ -169,9 +197,8 @@ export class Tysiac {
         }
     }
 
-    private finishRound() {
+    private finishTrick() {
         const roundCards = this.cardPot.cards;
-        this.clearPot(this.cardPot);
 
         const potPoints = roundCards.reduce(
             (total, c) => total + valueToPoints[c.value],
@@ -185,6 +212,7 @@ export class Tysiac {
 
         this.players[winningPlayerIndex].score += potPoints;
         this.setFirstPlayer(winningPlayerIndex);
+        this.clearPot(this.cardPot);
     }
 
     private setFirstPlayer(playerIndex: PlayerIndex) {
@@ -213,7 +241,16 @@ export class Tysiac {
             this.cardPot.suit ??= card.suit;
             this.cardPot.cards.push(card);
             this.currentPlayer.removeCard(card);
-            this.checkRoundFinished();
+
+            if (
+                this.cardPot.cards.length === 1 &&
+                this.currentPlayer.cards.length < 7 &&
+                this.currentPlayer.hasOtherCardForMarriage(card)
+            ) {
+                this._currentTrump = card.suit;
+                this.currentPlayer.score += suitToMarriagePoints[card.suit];
+            }
+            this.checkTrickFinished();
         } else {
             console.error('Invalid move', this, card);
         }
