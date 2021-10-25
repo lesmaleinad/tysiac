@@ -30,6 +30,9 @@ export const suitToMarriagePoints: { [key in Suit]: number } = {
     [Suit.Spades]: 40,
 };
 
+/**
+ * @returns positive if c2 is better, else negative
+ */
 export function cardCompare(c1: Card, c2: Card, led?: Suit, trump?: Suit) {
     if ((c1.suit === trump) !== (c2.suit === trump)) {
         return c2.suit === trump ? 1 : -1;
@@ -67,20 +70,16 @@ export interface CardPot {
 }
 
 export class Player {
-    private _cards: readonly Card[];
     public get cards(): readonly Card[] {
         return this._cards;
     }
 
-    public score: number = 0;
-
     constructor(
         public readonly id: PlayerIndex,
-        initalCards: readonly Card[] = [],
-        public bid?: number
-    ) {
-        this._cards = initalCards;
-    }
+        private _cards: readonly Card[] = [],
+        public bid?: number,
+        public score: number = 0
+    ) {}
 
     public hasCard(card: Card) {
         return this.cards.some((c) => equalCards(c, card));
@@ -110,13 +109,18 @@ export class Player {
     public toString() {
         return this.cards.map((c) => c.suit + c.value).join(',');
     }
+
+    public copy() {
+        return new Player(this.id, this.cards, this.bid, this.score);
+    }
 }
 
 export type PlayerIndex = 0 | 1 | 2;
+export type TysiacPlayers = readonly [Player, Player, Player];
 
 export class Tysiac {
-    public players: readonly [Player, Player, Player];
-    public get sortedPlayers(): readonly [Player, Player, Player] {
+    public players: TysiacPlayers;
+    public get sortedPlayers(): TysiacPlayers {
         return this.players.slice().sort((p1, p2) => p1.id - p2.id) as [
             Player,
             Player,
@@ -124,25 +128,36 @@ export class Tysiac {
         ];
     }
 
-    public readonly cardPot: CardPot = { cards: [], suit: undefined };
-    private _currentTrump?: Suit;
+    public get resolvedSortedScores(): [number, number, number] {
+        return this.sortedPlayers.map((p) =>
+            p.bid ? (p.bid <= p.score ? p.bid : -p.bid) : p.score
+        ) as [number, number, number];
+    }
+
     public get currentTrump(): Suit | undefined {
         return this._currentTrump;
     }
-    private _currentPlayerIndex: PlayerIndex;
+
     public get currentPlayer(): Player {
         return this.players[this._currentPlayerIndex];
     }
 
-    constructor(cards?: Card[], bid?: number) {
-        this.players = this.initPlayers(cards, bid);
-        this._currentPlayerIndex = 0;
+    public get isNewTrick(): boolean {
+        return this._currentPlayerIndex === 0;
     }
 
-    private initPlayers(
+    constructor(
         cards?: Card[],
-        bid?: number
-    ): readonly [Player, Player, Player] {
+        bid?: number,
+        private _currentTrump?: Suit,
+        private _currentPlayerIndex: PlayerIndex = 0,
+        public readonly cardPot: CardPot = { cards: [], suit: undefined },
+        initialPlayers?: TysiacPlayers
+    ) {
+        this.players = initialPlayers ?? this.initPlayers(cards, bid);
+    }
+
+    private initPlayers(cards?: Card[], bid?: number): TysiacPlayers {
         const shuffledCards = cards || this.shuffle(allCards);
         const third = Math.floor(shuffledCards.length / 3);
         const twoThird = shuffledCards.length - third;
@@ -241,7 +256,7 @@ export class Tysiac {
     }
 
     public sendMove(card: Card) {
-        if (this.isValidMove(card)) {
+        if (this.currentPlayer.hasCard(card) && this.isValidMove(card)) {
             this.cardPot.suit ??= card.suit;
             this.cardPot.cards.push(card);
             this.currentPlayer.removeCard(card);
@@ -264,10 +279,20 @@ export class Tysiac {
         const cardSuit = card.suit;
         const currentSuit = this.cardPot.suit;
         return (
-            this.currentPlayer.cards.some((c) => equalCards(c, card)) &&
-            (!currentSuit ||
-                cardSuit === currentSuit ||
-                this.currentPlayer.cards.every((c) => c.suit !== currentSuit))
+            !currentSuit ||
+            cardSuit === currentSuit ||
+            this.currentPlayer.cards.every((c) => c.suit !== currentSuit)
+        );
+    }
+
+    public copy() {
+        return new Tysiac(
+            undefined,
+            undefined,
+            this.currentTrump,
+            this._currentPlayerIndex,
+            { suit: this.cardPot.suit, cards: this.cardPot.cards.slice() },
+            this.players.map((p) => p.copy()) as [Player, Player, Player]
         );
     }
 }
