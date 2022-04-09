@@ -2,7 +2,7 @@ import { Tysiac, Card, cardCompare } from './index';
 
 let numOfScenes = 0;
 
-function findBestMove(
+export function findBestMove(
     currentGame: Tysiac
 ): [Card | undefined, [number, number, number]] {
     numOfScenes++;

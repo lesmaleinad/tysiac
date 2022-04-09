@@ -1,6 +1,6 @@
 import Readline from 'readline';
 import { Tysiac, Player, cardCompare, Card, Suit, Value } from '.';
-import { bestMoveWithTracking } from './rungame';
+import { bestMoveWithTracking, findBestMove } from './rungame';
 
 const game = new Tysiac(undefined);
 
@@ -51,34 +51,52 @@ async function getConsoleMove(): Promise<Card> {
             suit: match[1] as Suit,
             value: match[2] as Value,
         };
-    } else if (result === 'sequence') {
-        const [bestCard, points] = bestMoveWithTracking(game);
-        if (!game.players[0].bid && game.players[0].cards.length === 8) {
-            const bid = Math.max(100, points[0] - (points[0] % 5));
-            game.players[0].bid = bid;
+    }
 
-            console.log('Bid of ', bid, ' was made');
-            console.log('Best points possible: ', points);
+    switch (result) {
+        case 'aimove':
+            const [bestCard, points] = bestMoveWithTracking(game);
+            console.log('Expected points: ', points);
+            return bestCard!;
+        case 'aibid':
+            let [_, [bidPoints, __, ___]] = findBestMove(game);
+            console.log('Found points: ', bidPoints);
+            if (bidPoints < 100) {
+                console.log('P0 is probably screwed. Good luck!');
+                bidPoints = 100;
+                game.sortedPlayers[0].bid = bidPoints;
+            } else {
+                let willWin = false;
+                bidPoints = bidPoints - (bidPoints % 5);
+                while (bidPoints > 100 && !willWin) {
+                    console.log('Trying game with bid: ', bidPoints);
+                    game.sortedPlayers[0].bid = bidPoints;
+                    const [_, [pointsWithBid, __, ___]] = findBestMove(game);
+                    if (pointsWithBid > 0) {
+                        willWin = true;
+                    } else {
+                        console.log('Failed, reducing by 5');
+                        bidPoints -= 5;
+                    }
+                }
+            }
 
+            console.log('Placed bid: ', bidPoints);
             return getConsoleMove();
-        }
-
-        console.log('Expected points: ', points);
-        return bestCard!;
-    } else if (result === 'bid') {
-        const bidString = await getInput('Please enter p0 bid');
-        const bid = parseInt(bidString);
-        if (!isNaN(bid)) {
-            game.sortedPlayers[0].bid = bid;
-            console.log('~~ Bid set ~~');
+        case 'bid':
+            const bidString = await getInput('Please enter p0 bid');
+            const bid = parseInt(bidString);
+            if (!isNaN(bid)) {
+                game.sortedPlayers[0].bid = bid;
+                console.log('~~ Bid set ~~');
+                return getConsoleMove();
+            } else {
+                console.log('Invalid bid');
+                return getConsoleMove();
+            }
+        default:
+            console.log('Not a recognized input');
             return getConsoleMove();
-        } else {
-            console.log('Invalid bid');
-            return getConsoleMove();
-        }
-    } else {
-        console.log('Not a recognized input');
-        return getConsoleMove();
     }
 }
 
